@@ -62,12 +62,24 @@ CREATE TABLE users (
     version INT DEFAULT 1,
     created_at TIMESTAMP DEFAULT now(),
     updated_at TIMESTAMP DEFAULT now(),
-    deleted_at TIMESTAMP
+    deleted_at TIMESTAMP,
+
+    -- Full-Text Search column
+    search_vector tsvector
 );
 
--- Covering index for fast queries by phone
+-- Trigger to update search_vector on INSERT or UPDATE
+CREATE TRIGGER users_search_vector_update
+BEFORE INSERT OR UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION tsvector_update_trigger(search_vector, 'pg_catalog.english', name, email, phone);
+
+-- Indexes
 CREATE INDEX idx_users_phone_cover
 ON users(phone, id, name, role);
+
+CREATE INDEX idx_users_search_vector
+ON users USING GIN(search_vector);
 
 -- ============================================
 -- DRIVERS
@@ -85,7 +97,6 @@ CREATE TABLE drivers (
     deleted_at TIMESTAMP
 );
 
--- Covering index for fast lookup by user_id
 CREATE INDEX idx_drivers_user_cover
 ON drivers(user_id, id, rating, is_online);
 
@@ -105,24 +116,34 @@ CREATE TABLE cars (
     version INT DEFAULT 1,
     created_at TIMESTAMP DEFAULT now(),
     updated_at TIMESTAMP DEFAULT now(),
-    deleted_at TIMESTAMP
+    deleted_at TIMESTAMP,
+
+    -- Full-Text Search column
+    search_vector tsvector
 );
 
--- Covering index for fast lookup of cars by driver
+-- Trigger for updating search_vector automatically
+CREATE TRIGGER cars_search_vector_update
+BEFORE INSERT OR UPDATE ON cars
+FOR EACH ROW
+EXECUTE FUNCTION tsvector_update_trigger(search_vector, 'pg_catalog.english', brand, model, plate_number, color);
+
+-- Indexes
 CREATE INDEX idx_cars_driver_cover
 ON cars(driver_id, id, brand, model, status);
 
--- Index for car status queries
 CREATE INDEX idx_cars_status
 ON cars(status);
 
--- Partial index for only available cars (optimizes driver assignment)
 CREATE INDEX idx_cars_available
 ON cars(status, id, driver_id)
 WHERE status='available';
 
+CREATE INDEX idx_cars_search_vector
+ON cars USING GIN(search_vector);
+
 -- ============================================
--- CAR IMAGES (FILE SYSTEM STORAGE)
+-- CAR IMAGES
 -- ============================================
 
 CREATE TABLE car_images (
@@ -146,7 +167,6 @@ CREATE TABLE driver_locations (
     updated_at TIMESTAMP DEFAULT now()
 );
 
--- GiST index for spatial queries (nearest driver)
 CREATE INDEX idx_driver_location_geo
 ON driver_locations USING GIST(location);
 
@@ -171,19 +191,30 @@ CREATE TABLE bookings (
     completed_at TIMESTAMP,
     version INT DEFAULT 1,
     created_at TIMESTAMP DEFAULT now(),
-    updated_at TIMESTAMP DEFAULT now()
+    updated_at TIMESTAMP DEFAULT now(),
+
+    -- Full-Text Search column
+    search_vector tsvector
 );
 
--- Covering index for fetching bookings per user efficiently
+-- Trigger to update search_vector automatically
+CREATE TRIGGER bookings_search_vector_update
+BEFORE INSERT OR UPDATE ON bookings
+FOR EACH ROW
+EXECUTE FUNCTION tsvector_update_trigger(search_vector, 'pg_catalog.english', status, payment_status);
+
+-- Indexes
 CREATE INDEX idx_booking_user_cover
 ON bookings(user_id, created_at DESC, id, status, price);
 
--- Covering index for driver's active bookings
 CREATE INDEX idx_booking_driver_status
 ON bookings(driver_id, status, id);
 
 CREATE INDEX idx_booking_car
 ON bookings(car_id);
+
+CREATE INDEX idx_bookings_search_vector
+ON bookings USING GIN(search_vector);
 
 -- ============================================
 -- DRIVER REVIEWS
@@ -196,12 +227,22 @@ CREATE TABLE driver_reviews (
     user_id UUID REFERENCES users(id),
     rating INT CHECK (rating BETWEEN 1 AND 5),
     comment TEXT,
-    created_at TIMESTAMP DEFAULT now()
+    created_at TIMESTAMP DEFAULT now(),
+
+    -- Full-Text Search column
+    search_vector tsvector
 );
 
--- Covering index for fetching reviews fast
+CREATE TRIGGER driver_reviews_search_vector_update
+BEFORE INSERT OR UPDATE ON driver_reviews
+FOR EACH ROW
+EXECUTE FUNCTION tsvector_update_trigger(search_vector, 'pg_catalog.english', comment);
+
 CREATE INDEX idx_reviews_driver_cover
 ON driver_reviews(driver_id, rating, comment);
+
+CREATE INDEX idx_driver_reviews_search_vector
+ON driver_reviews USING GIN(search_vector);
 
 -- ============================================
 -- PAYMENTS
@@ -213,15 +254,25 @@ CREATE TABLE payments (
     amount NUMERIC NOT NULL,
     payment_method TEXT,
     status payment_status DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT now()
+    created_at TIMESTAMP DEFAULT now(),
+
+    -- Full-Text Search column
+    search_vector tsvector
 );
 
--- Covering index for payment queries
+CREATE TRIGGER payments_search_vector_update
+BEFORE INSERT OR UPDATE ON payments
+FOR EACH ROW
+EXECUTE FUNCTION tsvector_update_trigger(search_vector, 'pg_catalog.english', payment_method);
+
 CREATE INDEX idx_payment_booking_cover
 ON payments(booking_id, amount, status);
 
+CREATE INDEX idx_payments_search_vector
+ON payments USING GIN(search_vector);
+
 -- ============================================
--- NOTIFICATIONS (MOBILE APP)
+-- NOTIFICATIONS
 -- ============================================
 
 CREATE TABLE notifications (
@@ -230,9 +281,19 @@ CREATE TABLE notifications (
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     is_read BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT now()
+    created_at TIMESTAMP DEFAULT now(),
+
+    -- Full-Text Search column
+    search_vector tsvector
 );
 
--- Covering index for fast notification fetch per user
+CREATE TRIGGER notifications_search_vector_update
+BEFORE INSERT OR UPDATE ON notifications
+FOR EACH ROW
+EXECUTE FUNCTION tsvector_update_trigger(search_vector, 'pg_catalog.english', title, body);
+
 CREATE INDEX idx_notifications_user_cover
 ON notifications(user_id, created_at DESC, id, title, is_read);
+
+CREATE INDEX idx_notifications_search_vector
+ON notifications USING GIN(search_vector);
