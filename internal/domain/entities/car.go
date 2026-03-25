@@ -1,74 +1,75 @@
 package entities
 
 import (
-	"time"
-
 	"Go_c/internal/domain/enums"
+	domainErrors "Go_c/internal/domain/errors"
 
 	"github.com/google/uuid"
 )
 
-// Car represents a vehicle owned by a driver in the system.
-// Inherits ID, CreatedAt, UpdatedAt from Base.
+// Car represents a vehicle assigned to a driver
 type Car struct {
-	Base                        // ID, CreatedAt, UpdatedAt
-	DriverID    uuid.UUID       `json:"driver_id" db:"driver_id"`             // Driver who owns this car
-	Brand       string          `json:"brand" db:"brand"`                     // Car manufacturer
-	Model       string          `json:"model" db:"model"`                     // Car model
-	Year        int             `json:"year" db:"year"`                       // Manufacturing year
-	PlateNumber string          `json:"plate_number" db:"plate_number"`       // Unique plate number
-	Color       string          `json:"color" db:"color"`                     // Car color
-	Status      enums.CarStatus `json:"status" db:"status"`                   // Current operational status
-	Version     int             `json:"version" db:"version"`                 // Optimistic locking version
-	DeletedAt   *time.Time      `json:"deleted_at,omitempty" db:"deleted_at"` // Soft delete timestamp
+	Base
+
+	DriverID    uuid.UUID       `json:"driver_id" db:"driver_id"`                 // Owner driver
+	Brand       string          `json:"brand" db:"brand"`                         // Car brand
+	Model       string          `json:"model" db:"model"`                         // Car model
+	Year        *int            `json:"year,omitempty" db:"year"`                 // Manufacturing year
+	PlateNumber *string         `json:"plate_number,omitempty" db:"plate_number"` // Unique plate number
+	Color       *string         `json:"color,omitempty" db:"color"`               // Car color
+	Status      enums.CarStatus `json:"status" db:"status"`                       // Car status
 }
 
 //
 // ==========================
-// Car Behaviors
+// Behaviors
 // ==========================
 //
 
-// SetAvailable marks the car as available for accepting rides.
-func (c *Car) SetAvailable() {
+// Validate checks required fields
+func (c *Car) Validate() error {
+	if c.Brand == "" || c.Model == "" {
+		return domainErrors.ErrInvalidInput
+	}
+	return nil
+}
+
+// IsAvailable checks if car is ready for booking
+func (c *Car) IsAvailable() bool {
+	return c.Status == enums.CarAvailable
+}
+
+// MarkBusy sets car status to busy
+func (c *Car) MarkBusy() error {
+	if c.Status != enums.CarAvailable {
+		return domainErrors.ErrCarUnavailable
+	}
+
+	c.Status = enums.CarBusy
+	c.UpdateTimestamp()
+	return nil
+}
+
+// MarkAvailable sets car back to available
+func (c *Car) MarkAvailable() {
 	c.Status = enums.CarAvailable
 	c.UpdateTimestamp()
 }
 
-// SetBusy marks the car as currently being used for a ride.
-func (c *Car) SetBusy() {
-	c.Status = enums.CarBusy
-	c.UpdateTimestamp()
-}
-
-// SetOffline marks the car as offline (driver not active).
-func (c *Car) SetOffline() {
-	c.Status = enums.CarOffline
-	c.UpdateTimestamp()
-}
-
-// SetMaintenance marks the car as unavailable due to maintenance.
+// SetMaintenance sets car to maintenance mode
 func (c *Car) SetMaintenance() {
 	c.Status = enums.CarMaintenance
 	c.UpdateTimestamp()
 }
 
-// UpdateInfo updates the car basic information.
-func (c *Car) UpdateInfo(brand, model, color string, year int) {
-	c.Brand = brand
-	c.Model = model
-	c.Color = color
-	c.Year = year
+// SetOffline sets car to offline
+func (c *Car) SetOffline() {
+	c.Status = enums.CarOffline
 	c.UpdateTimestamp()
 }
 
-// IsActive checks whether the car has not been soft deleted.
-func (c *Car) IsActive() bool {
-	return c.DeletedAt == nil
-}
-
-// MarkDeleted performs a soft delete by setting the DeletedAt timestamp.
-func (c *Car) MarkDeleted() {
-	now := time.Now()
-	c.DeletedAt = &now
+// AssignDriver assigns a driver to the car
+func (c *Car) AssignDriver(driverID uuid.UUID) {
+	c.DriverID = driverID
+	c.UpdateTimestamp()
 }

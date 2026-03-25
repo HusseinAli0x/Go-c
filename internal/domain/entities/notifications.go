@@ -1,35 +1,53 @@
 package entities
 
-import "github.com/google/uuid"
+import (
+	"Go_c/internal/domain/errors"
+	"time"
 
-// Notification represents a system notification sent to a user.
+	"github.com/google/uuid"
+)
+
+// Notification represents a message sent to a user
 type Notification struct {
-	Base             // ID, CreatedAt, UpdatedAt
-	UserID uuid.UUID `json:"user_id" db:"user_id"` // Target user
+	Base
+
+	UserID uuid.UUID `json:"user_id" db:"user_id"` // Recipient
 	Title  string    `json:"title" db:"title"`     // Notification title
-	Body   string    `json:"body" db:"body"`       // Notification message
-	IsRead bool      `json:"is_read" db:"is_read"` // Read status
+	Body   string    `json:"body" db:"body"`       // Notification body
+	IsRead bool      `json:"is_read" db:"is_read"` // Whether notification has been read
 }
 
-//
 // ==========================
-// Notification Behaviors
+// Behaviors
 // ==========================
 //
 
-// MarkAsRead marks the notification as read.
-func (n *Notification) MarkAsRead() {
+// MarkRead marks notification as read
+func (n *Notification) MarkRead() {
 	n.IsRead = true
 	n.UpdateTimestamp()
 }
 
-// MarkAsUnread marks the notification as unread.
-func (n *Notification) MarkAsUnread() {
+// MarkUnread marks notification as unread
+func (n *Notification) MarkUnread() {
 	n.IsRead = false
 	n.UpdateTimestamp()
 }
 
-// IsUnread checks whether the notification has not been read yet.
-func (n *Notification) IsUnread() bool {
-	return !n.IsRead
+// UpdateContent updates title and body
+func (n *Notification) UpdateContent(title, body string) error {
+	if title == "" || body == "" {
+		return errors.ErrInvalidInput
+	}
+
+	n.Title = title
+	n.Body = body
+	n.UpdateTimestamp()
+	return nil
+}
+
+// IsRecent checks if notification was created/updated within given duration (seconds)
+func (n *Notification) IsRecent(durationInSeconds int64) bool {
+	elapsed := time.Since(n.UpdatedAt).Seconds()
+	return int64(elapsed) <= durationInSeconds
 }
